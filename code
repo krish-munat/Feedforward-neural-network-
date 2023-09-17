@@ -1,0 +1,70 @@
+# import the necessary packages
+from sklearn.preprocessing import LabelBinarizer  # For one-hot encoding labels
+from sklearn.metrics import classification_report  # To generate classification reports
+from tensorflow.keras.models import Sequential   # Sequential model for stacking layers
+from tensorflow.keras.layers import Dense        # Dense layers for fully connected neural network
+from tensorflow.keras.optimizers import SGD      # Stochastic Gradient Descent optimizer
+from tensorflow.keras.datasets import mnist      # MNIST dataset
+from tensorflow.keras import backend as K        # Backend for Keras (e.g., TensorFlow)
+import matplotlib.pyplot as plt                   # For plotting
+import numpy as np                               # For numerical operations
+import argparse                                  # For command-line arguments
+
+# construct the argument parse and parse the arguments
+ap = argparse.ArgumentParser()
+ap.add_argument("-o", "--output", required=True,
+	help=("path to the output loss/accuracy plot"))  # Argument parser for specifying output path
+args = vars(ap.parse_args())
+
+# grab the MNIST dataset
+print("[INFO] accessing MNIST...")
+((trainX, trainY), (testX, testY)) = mnist.load_data()  # Load MNIST dataset
+
+# each image in the MNIST dataset is represented as a 28x28x1
+# image, but in order to apply a standard neural network we must
+# first "flatten" the image to be simple list of 28x28=784 pixels
+trainX = trainX.reshape((trainX.shape[0], 28 * 28 * 1))  # Reshape training data
+testX = testX.reshape((testX.shape[0], 28 * 28 * 1))    # Reshape testing data
+
+# scale data to the range of [0, 1]
+trainX = trainX.astype("float32") / 255.0  # Normalize training data
+testX = testX.astype("float32") / 255.0    # Normalize testing data
+
+# convert the labels from integers to vectors
+lb = LabelBinarizer()  # Initialize label binarizer
+trainY = lb.fit_transform(trainY)  # One-hot encode training labels
+testY = lb.transform(testY)        # One-hot encode testing labels
+
+# define the 784-256-128-10 architecture using Keras
+model = Sequential()  # Initialize a sequential model
+model.add(Dense(256, input_shape=(784,), activation="sigmoid"))  # Add input layer with 256 units
+model.add(Dense(128, activation="sigmoid"))  # Add hidden layer with 128 units
+model.add(Dense(10, activation="softmax"))  # Add output layer with 10 units and softmax activation
+
+# train the model using SGD
+print("[INFO] training network...")
+sgd = SGD(0.01)  # Initialize SGD optimizer with learning rate 0.01
+model.compile(loss="categorical_crossentropy", optimizer=sgd,
+	metrics=["accuracy"])  # Compile the model with categorical cross-entropy loss
+H = model.fit(trainX, trainY, validation_data=(testX, testY),
+	epochs=100, batch_size=128)  # Train the model for 100 epochs with batch size 128
+
+# evaluate the network
+print("[INFO] evaluating network...")
+predictions = model.predict(testX, batch_size=128)  # Generate predictions on test set
+print(classification_report(testY.argmax(axis=1),
+	predictions.argmax(axis=1),
+	target_names=[str(x) for x in lb.classes_]))  # Generate and print classification report
+
+# plot the training loss and accuracy
+plt.style.use("ggplot")  # Set the style for the plot
+plt.figure()  # Create a new figure
+plt.plot(np.arange(0, 100), H.history["loss"], label="train_loss")  # Plot training loss
+plt.plot(np.arange(0, 100), H.history["val_loss"], label="val_loss")  # Plot validation loss
+plt.plot(np.arange(0, 100), H.history["accuracy"], label="train_acc")  # Plot training accuracy
+plt.plot(np.arange(0, 100), H.history["val_accuracy"], label="val_acc")  # Plot validation accuracy
+plt.title("Training Loss and Accuracy")  # Set plot title
+plt.xlabel("Epoch #")  # Set x-axis label
+plt.ylabel("Loss/Accuracy")  # Set y-axis label
+plt.legend()  # Add legend to the plot
+plt.savefig(args["output"])  # Save the plot to the specified output path
